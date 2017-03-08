@@ -1,0 +1,67 @@
+//working
+
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> LAND DETECTION <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<//                                     
+
+										/*          
+												 Date:6-10-2013         */
+
+
+/* Algorithm just for lane detection............... 
+  1)Get a coloured image from the camera,
+  2)Loop it up to get a video output,
+  3)Convert it gray scale,
+  4)Threshold it to zero,
+  5)Blur the image,
+  6)Run it through errosion filters,
+  7)Canny edge detection,
+  8)Hough transform  (Probabilistic)........                       
+																		*/
+
+  
+#include "opencv2/core/core_c.h"
+#include "opencv2/core/core.hpp"
+#include "opencv2/flann/miniflann.hpp"
+#include "opencv2/imgproc/imgproc_c.h"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/photo/photo.hpp"
+#include "opencv2/video/video.hpp"
+#include "opencv2/features2d/features2d.hpp"
+#include "opencv2/objdetect/objdetect.hpp"
+#include "opencv2/calib3d/calib3d.hpp"
+#include "opencv2/ml/ml.hpp"
+#include "opencv2/highgui/highgui_c.h"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/contrib/contrib.hpp"
+
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <conio.h> 
+
+using namespace std;
+void efficient_canny(IplImage*);
+
+void main()
+{
+cvNamedWindow("Example 1",0);						//new window
+CvCapture* capture= cvCreateCameraCapture(1);		//captures images
+IplImage *frame= cvQueryFrame(capture);				//capture next video frame
+cvWaitKey(3000);									//time for the camera to respond
+while(1)
+{
+frame= cvQueryFrame(capture);						//loop capture of images
+if(!frame) 											// if camera if not detected break
+break;
+cvShowImage("Example 1",frame);						//disp example 1
+char c=cvWaitKey(33);
+efficient_canny( frame);                            //call function
+if(c=='x')						
+break;
+}
+cvReleaseCapture(&capture);
+cvDestroyWindow( "Example 1" );						//release and destroy
+}
+
