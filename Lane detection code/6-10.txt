@@ -65,3 +65,46 @@ cvReleaseCapture(&capture);
 cvDestroyWindow( "Example 1" );						//release and destroy
 }
 
+void efficient_canny(IplImage* frame)
+{
+int i;
+CvSize imageSize = {0,0};							//initialization
+imageSize = cvGetSize(frame);						
+cvNamedWindow( "Example1threshold",1 );
+cvNamedWindow( "Example1medianfilter",1 );
+cvNamedWindow( "erode",1 );
+IplImage* cannyImg;									
+IplImage* color_dst = cvCreateImage( cvGetSize(frame), 8, 3 );	//color image
+CvMemStorage* storage = cvCreateMemStorage(0);					//initialize storage for storing lines(hough)
+CvSeq* lines=0;
+IplImage *destination = cvCreateImage(cvSize( frame->width, frame->height ), IPL_DEPTH_8U, 1 );  //create destination
+cvCvtColor( frame, destination, CV_RGB2GRAY );													//convert to gray
+cvThreshold(destination,destination,180,255,CV_THRESH_TOZERO);                                  //thresh to zero and save it to destination
+cvShowImage( "Example1threshold", destination );
+cvSmooth(destination,destination,CV_MEDIAN,3,0,0,0);                                            //smooth it using median smoothing
+cvShowImage( "Example1medianfilter", destination );
+cvDilate(destination,destination,NULL,17);													//dilate (erode) for better result
+cvShowImage( "erode", destination);	
+cannyImg = cvCreateImage(cvGetSize( destination), IPL_DEPTH_8U, 1);							
+cvCanny(destination, cannyImg, 50, 150, 3);													//canny edge detection  
+cvCvtColor( cannyImg, color_dst, CV_GRAY2BGR );												//convert it to color for hough transform
+lines = cvHoughLines2( cannyImg,storage,CV_HOUGH_STANDARD,1,CV_PI/180,150,0,0 );			//houghlines 
+cvLine( color_dst, cvPoint(imageSize.width/2,0),cvPoint(imageSize.width/2,imageSize.height),CV_RGB(0,255,0));	//draw green line at the center for controlling of the robot inbetween the lanes... 
+for( i = 0; i < MIN(lines->total,100); i++ )
+{
+//int count;
+//count==0;
+int x;
+float* line = (float*)cvGetSeqElem(lines,i);
+float rho = line[0];
+float theta = line[1];
+CvPoint pt1, pt2,temp1,temp2;
+double a = cos(theta), b = sin(theta);
+double x0 = a*rho, y0 = b*rho;
+pt1.x = cvRound(x0 + 1000*(-b));
+pt1.y = cvRound(y0 + 1000*(a));
+pt2.x = cvRound(x0 - 1000*(-b));
+pt2.y = cvRound(y0 - 1000*(a));
+cvLine( color_dst, pt1, pt2, CV_RGB(255,0,0), 3, 8 );				//draw red lines (hough lines)
+printf("lane coordinates are (%d,%d) and (%d,%d)",pt1.x,pt1.y,pt2.x,pt2.y);
+
