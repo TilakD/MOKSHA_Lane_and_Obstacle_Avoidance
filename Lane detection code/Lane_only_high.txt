@@ -1,0 +1,488 @@
+
+
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> LAND DETECTION <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<//                                     
+
+									
+
+
+/* Algorithm just for lane detection............... 
+  1)Get a coloured image from the camera,
+  2)Loop it up to get a video output,
+  3)Convert it gray scale,
+  4)Threshold it to zero,
+  5)Blur the image,
+  6)Run it through errosion filters,
+  7)Canny edge detection,
+  8)Hough transform  (Probabilistic)........                       
+																		*/
+#include "StdAfx.h"
+
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+
+#include <conio.h>
+#include <cvaux.h>
+#include <highgui.h>
+#include <cxmisc.h>
+#include <cv.h>
+
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <conio.h> 
+
+
+using namespace System;
+using namespace System::IO::Ports;
+
+IplImage* DrawHistogram(CvHistogram *hist, float scaleX=3, float scaleY=3)
+{
+float histMax = 0;
+    cvGetMinMaxHistValue(hist, 0, &histMax, 0, 0);
+
+ IplImage* imgHist = cvCreateImage(cvSize(256*scaleX, 64*scaleY), 8 ,1);
+    cvZero(imgHist);
+
+   for(int i=0;i<255;i++)
+    {
+        float histValue = cvQueryHistValue_1D(hist, i);
+        float nextValue = cvQueryHistValue_1D(hist, i+1);
+ 
+        CvPoint pt1 = cvPoint(i*scaleX, 64*scaleY);
+        CvPoint pt2 = cvPoint(i*scaleX+scaleX, 64*scaleY);
+        CvPoint pt3 = cvPoint(i*scaleX+scaleX, (64-nextValue*64/histMax)*scaleY);
+        CvPoint pt4 = cvPoint(i*scaleX, (64-histValue*64/histMax)*scaleY);
+ 
+        int numPts = 5;
+        CvPoint pts[] = {pt1, pt2, pt3, pt4, pt1};
+ 
+        cvFillConvexPoly(imgHist, pts, numPts, cvScalar(255));
+    }
+    return imgHist;
+	cvReleaseImage(&imgHist);
+}
+
+
+
+
+			/////////////////////////LEFT FRAME HOUGH//////////////////////////////
+int efficient_canny_left(IplImage* left_frame)
+{                           ////////////////////////smoothing canny hough///////////////////////
+ int i=0;
+CvSize imageSize_left = {0,0};	
+imageSize_left = cvGetSize(left_frame);	
+ //cvShowImage("left_frame",left_frame);
+ 
+//cvNamedWindow( "Example1medianfilter",1 );
+//cvNamedWindow( "erode",1 );
+IplImage* cannyImg_left;	
+CvMemStorage* storage_left = cvCreateMemStorage(0);					//initialize storage for storing lines(hough)
+CvSeq* lines_left=0;
+
+
+IplImage *destination_left = cvCreateImage(cvSize( left_frame->width, left_frame->height ),IPL_DEPTH_8U, 1 ); 
+
+cvErode(left_frame,destination_left,NULL,1);						//erode						<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<+____edit value
+///cvShowImage( "erode_left", destination_left);	                       // change values it if required while testing on grass
+
+cvSmooth(destination_left,destination_left,CV_MEDIAN,7,0,0,0);							//smooth it using median smoothing<-<<<<<<<<<<<<<<<<<<<___edit value
+///cvShowImage( "medianfilter_left", destination_left );
+
+//cvErode(destination_left,destination_left,NULL,5);						//erode 
+//cvShowImage( "dilate_left", destination_left);	                       // change values it if required while testing on grass
+
+cannyImg_left = cvCreateImage(cvGetSize( destination_left), IPL_DEPTH_8U, 1);							
+cvCanny(destination_left, cannyImg_left, 125, 200, 3);		                                       //canny edge detection
+
+IplImage* color_dst_left = cvCreateImage( cvGetSize(left_frame), 8, 3 );
+cvCvtColor( cannyImg_left, color_dst_left, CV_GRAY2BGR );												//convert it to color for hough transform
+
+
+lines_left = cvHoughLines2( cannyImg_left,storage_left,CV_HOUGH_STANDARD,1,CV_PI/180,60,0,0 );//<<<<<<+++++=====
+
+
+/*
+if(lines_left->total==0)															 
+{
+printf("\n no left lane detected ");
+printf(" \n Move slightly towards the left");
+// Move slightly towards the left 
+cvReleaseImage(&color_dst_left);
+cvReleaseImage(&destination_left);
+cvReleaseImage(&cannyImg_left);
+cvReleaseMemStorage(&storage_left);
+return;
+} */
+
+if(lines_left->total==0)
+	return 1;
+
+for( i = 0; i < MIN(lines_left->total,100); i++ )
+{
+int x=0,y=0;
+float* line = (float*)cvGetSeqElem(lines_left,i);
+float rho = line[0];
+float theta = line[1];
+CvPoint pt1={0,0}, pt2={0,0};
+double a = cos(theta), b = sin(theta);
+double x0 = a*rho, y0 = b*rho;
+pt1.x = cvRound(x0 + 1000*(-b));
+pt1.y = cvRound(y0 + 1000*(a));
+pt2.x = cvRound(x0 - 1000*(-b));
+pt2.y = cvRound(y0 - 1000*(a));
+cvLine( color_dst_left, pt1, pt2, CV_RGB(255,0,0), 3, 0 );								//drawing red lines (hough lines)
+//printf("\n lane coordinates are (%d,%d) and (%d,%d)",pt1.x,pt1.y,pt2.x,pt2.y);    //no need of the coordinates now...
+
+     
+
+      ////////////////////// motor control of robot for left cam ////////////////////////////
+x=(imageSize_left.width);
+y=(imageSize_left.height)/2;
+CvPoint temp;
+if(pt1.y < y && pt2.y > y)
+{
+	temp=pt1;
+	pt1=pt2;
+	pt2=temp;
+}
+cvShowImage( "Hough_left", color_dst_left );
+
+cvReleaseImage(&color_dst_left);
+cvReleaseImage(&destination_left);
+cvReleaseImage(&cannyImg_left);
+cvReleaseMemStorage(&storage_left);
+
+if((pt1.x >(x/4))||(pt2.x > (x/4)))
+{
+	return 2;
+printf("\n MOVE RIGHT MOVE RIGHT MOVE RIGHT MOVE RIGHT");
+}
+else
+{
+return 1;
+}
+ }    ////////////////////////////////// end of motor controll //////////////////////// 
+
+
+//cvNamedWindow( "canny_left", 20 );
+//cvShowImage( "canny_left", cannyImg_left );
+//cvNamedWindow( "Hough_left",1 );
+
+   
+
+}
+
+/////////////////////////////////////////////////////split_camera_processing_LEFT/////////////////////////////////////////////////
+int split_camera_processing_LEFT(IplImage* left_frame)
+{
+cvShowImage("color input_left",left_frame);						//disp color input
+char c=cvWaitKey(33);
+int retl;
+////////////////////////////////////////histogram//////////////////////////////////
+ int numBins = 256;
+    float range[] = {0, 255};
+    float *ranges[] = { range };
+ 
+    CvHistogram *hist = cvCreateHist(1, &numBins, CV_HIST_ARRAY, ranges, 1);
+    cvClearHist(hist);
+    IplImage* imgRed_left = cvCreateImage(cvGetSize(left_frame), 8, 1);
+    IplImage* imgGreen_left = cvCreateImage(cvGetSize(left_frame), 8, 1);
+    IplImage* imgBlue_left = cvCreateImage(cvGetSize(left_frame), 8, 1);
+ 
+    cvSplit(left_frame, imgBlue_left, imgGreen_left, imgRed_left, NULL);
+
+	cvZero(imgBlue_left);
+	cvZero(imgGreen_left);
+
+
+
+	CvSize s = cvSize(left_frame->width, left_frame->height);
+    int d = left_frame->depth;
+	IplImage* merg_left = cvCreateImage(s, d, 3);
+	cvMerge(imgBlue_left,imgGreen_left,imgRed_left,NULL,merg_left);		//get the merged output of only red..
+//cvNamedWindow( "merg_left", 20 );
+///cvShowImage( "merg_left", merg_left );
+	
+IplImage *destination_left = cvCreateImage (cvSize( left_frame->width, left_frame->height ),IPL_DEPTH_8U, 1 ); 
+cvCvtColor( left_frame, destination_left, CV_RGB2GRAY );		//convert to gray
+//cvNamedWindow( "destination_left", 20 );
+///cvShowImage( "destination_left", destination_left );
+
+	//IplImage* out = cvCreateImage( cvGetSize(destination_left), IPL_DEPTH_8U, 1 );  //comment this if equalization not required
+	//cvEqualizeHist( destination_left, out );             //same over here
+	//cvShowImage( "equalized_left", out );               //same over here
+
+    cvCalcHist(&destination_left, hist, 0, 0);           //destination instead of out (if equalization not required)
+    IplImage* imgHistgray_left = DrawHistogram(hist);
+	
+	////////////////////////////////weighted avg and thresholding////////////////////
+	unsigned int weight_avg;
+	unsigned long int w_sum = 0;
+	unsigned int i;
+	float x;
+	for(i=0;i<256;i++)
+	{
+		x=cvQueryHistValue_1D(hist,i);
+		w_sum += (i *x );
+	}
+	weight_avg = (w_sum * 1.5) / (307200);////////////////////////<-<-<-<-<-<-
+	//printf("\n weight avg = %d", weight_avg);
+
+
+cvThreshold(destination_left,destination_left,weight_avg,255,CV_THRESH_BINARY);       //destination instead of out (if equalization not required)
+
+ ///cvShowImage("Histogram of Gray_left", imgHistgray_left);
+///cvShowImage( "out-last_left", destination_left );                            //destination instead of out (if equalization not required)
+
+    cvClearHist(hist);
+ 
+ retl=efficient_canny_left(destination_left);									//call for efficient canny     
+   //if(c=='x')						
+//break;
+
+   //cvReleaseImage(&out);                     //comment this if equalization not required
+  cvReleaseImage(&imgHistgray_left);
+  cvReleaseImage(&merg_left);
+ //cvReleaseImage(&left_frame);
+cvReleaseImage(&destination_left);
+cvReleaseImage(&imgRed_left);
+cvReleaseImage(&imgBlue_left);
+cvReleaseImage(&imgGreen_left);
+return retl;
+}
+
+
+
+
+
+//////////////////////////////////////////////////RIGHT CAMERA PROCESSING/////////////////////////////////////////////////////
+int efficient_canny_Right(IplImage* right_frame)
+{                           ////////////////////////smoothing canny hough///////////////////////
+ int i=0;
+CvSize imageSize_right = {0,0};	
+imageSize_right = cvGetSize(right_frame);	
+ //cvShowImage("right_frame",right_frame);
+ 
+//cvNamedWindow( "Example1medianfilter_right",1 );
+//cvNamedWindow( "erode_right",1 );
+IplImage* cannyImg_right;	
+CvMemStorage* storage_right = cvCreateMemStorage(0);					//initialize storage for storing lines(hough)
+CvSeq* right_lines=0;
+
+
+IplImage *destination_right = cvCreateImage(cvSize( right_frame->width, right_frame->height ),IPL_DEPTH_8U, 1 ); 
+
+cvErode(right_frame,destination_right,NULL,1);						//erode						<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<+____edit value
+///cvShowImage( "erode_right", destination_right);	                       // change values it if required while testing on grass
+
+cvSmooth(destination_right,destination_right,CV_MEDIAN,7,0,0,0);							//smooth it using median smoothing<-<<<<<<<<<<<<<<<<<<<___edit value
+///cvShowImage( "medianfilter_right", destination_right );
+
+//cvErode(destination_right,destination_right,NULL,5);						//erode 
+//cvShowImage( "dilate_right", destination_right);	                       // change values it if required while testing on grass
+
+cannyImg_right = cvCreateImage(cvGetSize( destination_right), IPL_DEPTH_8U, 1);							
+cvCanny(destination_right, cannyImg_right, 125, 200, 3);		                                       //canny edge detection
+
+IplImage* color_dst_right = cvCreateImage( cvGetSize(right_frame), 8, 3 );
+cvCvtColor( cannyImg_right, color_dst_right, CV_GRAY2BGR );												//convert it to color for hough transform
+
+
+
+right_lines = cvHoughLines2( cannyImg_right,storage_right,CV_HOUGH_STANDARD,1,CV_PI/180,60,0,0 ); //<<<<<<+++++=====
+
+if(right_lines->total==0)
+	return 1;
+
+for( i = 0; i < MIN(right_lines->total,100); i++ )
+{
+int x=0,y=0;
+float* line = (float*)cvGetSeqElem(right_lines,i);
+float rho = line[0];
+float theta = line[1];
+CvPoint pt1={0,0}, pt2={0,0};
+double a = cos(theta), b = sin(theta);
+double x0 = a*rho, y0 = b*rho;
+pt1.x = cvRound(x0 + 1000*(-b));
+pt1.y = cvRound(y0 + 1000*(a));
+pt2.x = cvRound(x0 - 1000*(-b));
+pt2.y = cvRound(y0 - 1000*(a));
+cvLine( color_dst_right, pt1, pt2, CV_RGB(255,0,0), 3, 0 );								//drawing red lines (hough lines)
+//printf("\n lane coordinates are (%d,%d) and (%d,%d)",pt1.x,pt1.y,pt2.x,pt2.y);    //no need of the coordinates now...
+
+
+          ////////////////////// motor control of robot for right cam ////////////////////////////
+x=((imageSize_right.width));
+y=(imageSize_right.height)/2;
+CvPoint temp;
+if(pt1.y < y && pt2.y > y)
+{
+	temp=pt1;
+	pt1=pt2;
+	pt2=temp;
+}
+cvShowImage( "HoughRight", color_dst_right );
+
+ cvReleaseImage(&color_dst_right);
+cvReleaseImage(&destination_right);
+cvReleaseImage(&cannyImg_right);
+cvReleaseMemStorage(&storage_right);
+
+if((pt1.x < (3*x/4))||(pt2.x < (3*x/4)))
+{
+	return 0;
+printf("\n MOVE LEFT MOVE LEFT MOVE LEFT MOVE LEFT ");
+}
+  else
+{
+return 1;
+}
+}////////////////////////////////// end of motor controll //////////////////////// 
+//cvNamedWindow( "canny", 20 );
+///cvShowImage( "canny", cannyImg_right );
+//cvNamedWindow( "Hough",1 );
+
+  
+
+}
+
+
+
+/////////////////////////////////////////////split_camera_processing_RIGHT///////////////////////////////////////////////////////////
+int split_camera_processing_RIGHT(IplImage* right_frame)
+{
+cvShowImage("color input_right",right_frame);						//disp color input
+char c=cvWaitKey(33);
+int retr;
+////////////////////////////////////////histogram//////////////////////////////////
+ int numBins = 256;
+    float range[] = {0, 255};
+    float *ranges[] = { range };
+    CvHistogram *hist = cvCreateHist(1, &numBins, CV_HIST_ARRAY, ranges, 1);
+    cvClearHist(hist);
+    IplImage* imgRed_right = cvCreateImage(cvGetSize(right_frame), 8, 1);
+    IplImage* imgGreen_right = cvCreateImage(cvGetSize(right_frame), 8, 1);
+    IplImage* imgBlue_right = cvCreateImage(cvGetSize(right_frame), 8, 1);
+ 
+   	 cvSplit(right_frame, imgBlue_right, imgGreen_right, imgRed_right, NULL);
+
+	cvZero(imgBlue_right);
+	cvZero(imgGreen_right);
+
+	CvSize s = cvSize(right_frame->width, right_frame->height);
+    int d = right_frame->depth;
+	IplImage* merg_right = cvCreateImage(s, d, 3);
+	cvMerge(imgBlue_right,imgGreen_right,imgRed_right,NULL,merg_right);		//get the merged output of only red..
+//cvNamedWindow( "merg_right", 20 );
+///cvShowImage( "merg_right_right", merg_right );
+IplImage *destination_right = cvCreateImage(cvSize(right_frame->width, right_frame->height ),IPL_DEPTH_8U, 1 ); 
+cvCvtColor( right_frame, destination_right, CV_RGB2GRAY );		//convert to gray
+//cvNamedWindow( "destination_right", 20 );
+///cvShowImage( "destination_Right", destination_right );
+
+	//IplImage* out = cvCreateImage( cvGetSize(destination_right), IPL_DEPTH_8U, 1 );  //comment this if equalization not required
+	//cvEqualizeHist( destination_right, out );             //same over here
+	//cvShowImage( "equalized_right", out );               //same over here
+
+    cvCalcHist(&destination_right, hist, 0, 0);           //destination instead of out (if equalization not required)
+    IplImage* imgHistgray = DrawHistogram(hist);
+	
+	
+
+	////////////////////////////////weighted avg and thresholding////////////////////
+	unsigned int weight_avg;
+	unsigned long int w_sum = 0;
+	unsigned int i;
+	float x;
+	for(i=0;i<256;i++)
+	{
+		x=cvQueryHistValue_1D(hist,i);
+		w_sum += (i *x );
+	}
+	weight_avg = (w_sum * 1.5) / (307200);////////////////////////<-<-<-<-<-<-
+	//printf("\n weight avg = %d", weight_avg);
+
+
+cvThreshold(destination_right,destination_right,weight_avg,255,CV_THRESH_BINARY);       //destination instead of out (if equalization not required)
+
+ ///cvShowImage("Histogram of Gray_right", imgHistgray);
+///cvShowImage( "out-last_right", destination_right );                            //destination instead of out (if equalization not required)
+
+    cvClearHist(hist);
+ 
+ retr=efficient_canny_Right(destination_right);									//call for efficient canny     
+   //if(c=='x')						
+//break;
+   
+   //cvReleaseImage(&out);                     //comment this if equalization not required
+  cvReleaseImage(&imgHistgray);
+  cvReleaseImage(&merg_right);
+ //cvReleaseImage(&left_frame);
+cvReleaseImage(&destination_right);
+cvReleaseImage(&imgRed_right);
+cvReleaseImage(&imgBlue_right);
+cvReleaseImage(&imgGreen_right); 
+return retr;
+}
+
+
+
+void main()
+{
+	int retl,retr;
+
+	String^ portName;
+ 
+	
+
+	Console::WriteLine("Enter the Port Name of mc");
+	portName=Console::ReadLine();
+	SerialPort^ mc;
+	 String^ ret;
+	mc = gcnew SerialPort(portName,9600);
+    mc-> Open(); // OPEN PORT
+//cvNamedWindow("color input",0);						//new window
+CvCapture* left_cam= cvCreateCameraCapture(0);		//left_cams images
+CvCapture* right_cam= cvCreateCameraCapture(1);		//left_cams images
+IplImage *right_frame= cvQueryFrame(right_cam);
+IplImage *left_frame= cvQueryFrame(left_cam);				//left_cam next video left_frame
+cvWaitKey(3000);									//time for the camera to respond
+while(1)
+{
+left_frame= cvQueryFrame(left_cam);	//loop left_cam of images
+right_frame= cvQueryFrame(right_cam);	
+//if(!left_frame) 											// if camera if not detected break
+//break;
+
+retl=1;
+retr=1;
+retl=split_camera_processing_LEFT(left_frame);
+retr=split_camera_processing_RIGHT(right_frame);
+
+printf("\n retl=%d retr=%d ",retl,retr);
+if(retl==2&&retr==0)
+	mc->WriteLine("1");
+else if(retl==1||retr==1)
+{
+	ret=Convert::ToString(retl*retr);
+	mc->WriteLine(ret);
+}
+else
+	mc->WriteLine("1");
+
+
+
+}
+cvReleaseImage(&left_frame);
+cvReleaseCapture(&left_cam);
+cvReleaseImage(&right_frame);
+cvReleaseCapture(&right_cam);
+cvDestroyWindow( "Example 1" );						//release and destroy
+}
