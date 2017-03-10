@@ -1,0 +1,191 @@
+////not working
+
+//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> LAND DETECTION <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<//                                     
+
+										/*          
+												 Date:8-10-2013         */
+
+
+/* Algorithm just for lane detection............... 
+  1)Get a coloured image from the camera,
+  2)Loop it up to get a video output,
+  3)Convert it gray scale,
+  4)Threshold it to zero,
+  5)Blur the image,
+  6)Run it through errosion filters,
+  7)Canny edge detection,
+  8)Hough transform  (Probabilistic)........                       
+																		*/
+
+  
+#include "opencv2/core/core_c.h"
+#include "opencv2/core/core.hpp"
+#include "opencv2/flann/miniflann.hpp"
+#include "opencv2/imgproc/imgproc_c.h"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/photo/photo.hpp"
+#include "opencv2/video/video.hpp"
+#include "opencv2/features2d/features2d.hpp"
+#include "opencv2/objdetect/objdetect.hpp"
+#include "opencv2/calib3d/calib3d.hpp"
+#include "opencv2/ml/ml.hpp"
+#include "opencv2/highgui/highgui_c.h"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/contrib/contrib.hpp"
+
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <conio.h> 
+
+using namespace std;
+void efficient_canny(IplImage*);
+
+void main()
+{
+cvNamedWindow("Example 1",0);						//new window
+CvCapture* capture= cvCreateCameraCapture(1);		//captures images
+IplImage *frame= cvQueryFrame(capture);				//capture next video frame
+cvWaitKey(3000);									//time for the camera to respond
+while(1)
+{
+frame= cvQueryFrame(capture);						//loop capture of images
+if(!frame) 											// if camera if not detected break
+break;
+cvShowImage("Example 1",frame);						//disp example 1
+char c=cvWaitKey(33);
+efficient_canny( frame);                            //call function
+if(c=='x')						
+break;
+}
+cvReleaseCapture(&capture);
+cvDestroyWindow( "Example 1" );						//release and destroy
+}
+
+void efficient_canny(IplImage* frame)
+{
+int i;
+CvSize imageSize = {0,0};							//initialization
+imageSize = cvGetSize(frame);						
+cvNamedWindow( "Example1threshold",1 );
+cvNamedWindow( "Example1medianfilter",1 );
+cvNamedWindow( "erode",1 );
+IplImage* cannyImg;									
+IplImage* color_dst = cvCreateImage( cvGetSize(frame), 8, 3 );	//color image
+CvMemStorage* storage = cvCreateMemStorage(0);					//initialize storage for storing lines(hough)
+CvSeq* lines=0;
+IplImage *destination = cvCreateImage(cvSize( frame->width, frame->height ), IPL_DEPTH_8U, 1 );  //create destination
+cvCvtColor( frame, destination, CV_RGB2GRAY );													//convert to gray
+cvThreshold(destination,destination,180,255,CV_THRESH_TOZERO);                                  //thresh to zero and save it to destination
+cvShowImage( "Example1threshold", destination );
+cvSmooth(destination,destination,CV_MEDIAN,3,0,0,0);                                            //smooth it using median smoothing
+cvShowImage( "Example1medianfilter", destination );
+cvDilate(destination,destination,NULL,17);													//dilate (erode) for better result
+cvShowImage( "erode", destination);	
+cannyImg = cvCreateImage(cvGetSize( destination), IPL_DEPTH_8U, 1);							
+cvCanny(destination, cannyImg, 50, 150, 3);													//canny edge detection  
+cvCvtColor( cannyImg, color_dst, CV_GRAY2BGR );												//convert it to color for hough transform
+lines = cvHoughLines2( cannyImg,storage,CV_HOUGH_STANDARD,1,CV_PI/180,150,0,0 );			//houghlines 
+cvNamedWindow( "Hough",1 );
+cvShowImage( "Hough", color_dst );
+cvNamedWindow( "Example1", 20 );
+cvShowImage( "Example1", destination );
+cvNamedWindow( "canny", 20 );
+cvShowImage( "canny", cannyImg );
+
+if(lines->total==0)
+{
+printf("\n no lane detected");
+printf(" \n call GPS interrupt");
+return;
+}
+
+
+for( i = 0; i < MIN(lines->total,100); i++ )
+{
+int x,y,y1;
+float* line = (float*)cvGetSeqElem(lines,i);
+float rho = line[0];
+float theta = line[1];
+CvPoint pt1={0,0}, pt2={0,0};
+double a = cos(theta), b = sin(theta);
+double x0 = a*rho, y0 = b*rho;
+pt1.x = cvRound(x0 + 1000*(-b));
+pt1.y = cvRound(y0 + 1000*(a));
+pt2.x = cvRound(x0 - 1000*(-b));
+pt2.y = cvRound(y0 - 1000*(a));
+cvLine( color_dst, pt1, pt2, CV_RGB(255,0,0), 3, 8 );				//draw red lines (hough lines)
+printf("\n lane coordinates are (%d,%d) and (%d,%d)",pt1.x,pt1.y,pt2.x,pt2.y);
+
+
+
+          //////////////////////  control of robot  ////////////////////////////
+x=(imageSize.width)/2;
+y=(imageSize.height)/3;
+y1=(imageSize.height)*(2/3);
+if (pt1.x < x)										//when left lane detected
+{
+	printf("\n left lane detected");
+	if(pt2.x < x)
+		{
+			printf("\n continue journey");
+	    }
+	else
+	{
+		if(pt1.y > y && pt1.y < y1)
+		{
+			if(pt2.y >y && pt2.y < y1)
+			{
+				printf("\n call GPS interrupt");
+			}
+			else
+			{
+				printf("\n move move right");
+			}
+		}
+		else
+			printf("\n move right");
+	}
+}
+
+else if(pt1.x > x)									//when right lane detected 
+{
+	printf("\n right lane detected");
+		if(pt2.x > x)
+			{
+			printf("\n continue journey");	
+		    }
+		else
+			{
+		if(pt1.y > y && pt1.y < y1)
+		{
+			if(pt2.y >y && pt2.y < y1)
+			{
+				printf("\n call GPS interrupt");
+			}
+			else
+			{
+				printf("\n move move left");
+			}
+		}
+		else
+			printf("\n move left");
+	}
+}
+
+     ////////////////////////////////// end of controll //////////////////////// 
+}
+/*cvNamedWindow( "Hough",1 );
+cvShowImage( "Hough", color_dst );
+cvNamedWindow( "Example1", 20 );
+cvShowImage( "Example1", destination );
+cvNamedWindow( "canny", 20 );
+cvShowImage( "canny", cannyImg );*/
+cvReleaseImage(&color_dst);
+cvReleaseImage(&destination);
+cvReleaseImage(&cannyImg);
+cvReleaseMemStorage(&storage);  //release all created images/memory to avoid RAM memory buildup..
+}
