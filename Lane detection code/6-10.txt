@@ -108,3 +108,48 @@ pt2.y = cvRound(y0 - 1000*(a));
 cvLine( color_dst, pt1, pt2, CV_RGB(255,0,0), 3, 8 );				//draw red lines (hough lines)
 printf("lane coordinates are (%d,%d) and (%d,%d)",pt1.x,pt1.y,pt2.x,pt2.y);
 
+          //////////////////////  control of robot  ////////////////////////////
+x=(imageSize.width)/2;
+scanf("%d %d %d %d", & pt1.x, & pt1.y, & pt2.x, & pt2.y);
+
+while(pt1.x < x)										//when left lane detected
+{
+	if(pt2.x < x)
+		{
+			printf("\n left lane detected");
+			printf("\n continue journey");
+	    }
+	else
+		printf("move right");
+}
+
+while(pt1.x > x);										//when right lane detected 
+{
+		if(pt2.x > x)
+			{
+			printf("\n right lane detected");
+			printf("\n continue journey");	
+		    }
+		else
+			printf("\n move left");
+}
+
+     ////////////////////////////////// end of controll //////////////////////// 
+
+//count=count+1;
+//if(count%2)
+//   printf("lane 1 coordinates are (%d,%d) and (%d,%d)",pt1.x,pt1.y,pt2.x,pt2.y);
+//else
+//	printf("\n          lane 2 coordinates are (%d,%d) and (%d,%d)",pt1.x,pt1.y,pt2.x,pt2.y);
+}
+cvNamedWindow( "Hough",1 );
+cvShowImage( "Hough", color_dst );
+cvNamedWindow( "Example1", 20 );
+cvShowImage( "Example1", destination );
+cvNamedWindow( "canny", 20 );
+cvShowImage( "canny", cannyImg );
+cvReleaseImage(&color_dst);
+cvReleaseImage(&destination);
+cvReleaseImage(&cannyImg);
+cvReleaseMemStorage(&storage);  //release all created images/memory to avoid RAM memory buildup..
+}
