@@ -30,14 +30,6 @@
 #include <cxmisc.h>
 #include <cv.h>
 
-#include <vector>
-#include <string>
-#include <algorithm>
-#include <stdio.h>
-#include <ctype.h>
-#include <stdlib.h>
-#include <conio.h> 
-
 
 using namespace System;
 using namespace System::IO::Ports;
